@@ -7,6 +7,45 @@
 #include "mmu.h"
 #include "proc.h"
 
+
+int
+sys_nice(void)
+{
+    int pid, value;
+    struct proc *p;
+    int old_nice;
+
+    // Fetch arguments from the user
+    if(argint(0, &pid) < 0 || argint(1, &value) < 0)
+        return -1;
+
+    // Edge case handling: check if value is within bounds
+    if (value < 0 || value > MAX_NICE) {
+        return -1; // Return error for out-of-bound values
+    }
+
+    acquire(&ptable.lock);   // Lock the process table
+
+    // Iterate over the process table to find the process by PID
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if(p->pid == pid) {       // Check if this is the target process
+            old_nice = p->nice;   // Store old nice value before updating
+            p->nice = value;      // Update to new nice value
+            cprintf("Changing PID %d nice from %d to %d\n", pid, old_nice, value); // Debug
+            release(&ptable.lock);
+
+            return old_nice;  // Return only the old nice value
+        }
+    }
+
+    release(&ptable.lock);  // Unlock the process table if process is not found
+    return -1;              // Process not found
+}
+
+
+
+
+
 int
 sys_fork(void)
 {

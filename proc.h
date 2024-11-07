@@ -1,3 +1,6 @@
+
+#include "spinlock.h"
+
 // Per-CPU state
 struct cpu {
   uchar apicid;                // Local APIC ID
@@ -12,6 +15,8 @@ struct cpu {
 
 extern struct cpu cpus[NCPU];
 extern int ncpu;
+#define MAX_NICE 10  // Adjust this as per your priority range
+
 
 //PAGEBREAK: 17
 // Saved registers for kernel context switches.
@@ -48,8 +53,22 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
-  char name[16];               // Process name (debugging)
+  char name[16];    
+  int nice;           // Process name (debugging)
 };
+
+struct ptable {
+    struct spinlock lock;
+    struct proc proc[NPROC];
+};
+
+extern struct ptable ptable;
+
+
+
+
+
+
 
 // Process memory is laid out contiguously, low addresses first:
 //   text

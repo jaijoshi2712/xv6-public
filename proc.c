@@ -7,10 +7,10 @@
 #include "proc.h"
 #include "spinlock.h"
 
-struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
-} ptable;
+
+
+struct ptable ptable;
+
 
 static struct proc *initproc;
 
@@ -78,32 +78,39 @@ allocproc(void)
 
   acquire(&ptable.lock);
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == UNUSED)
+  // Find an UNUSED process slot in the process table
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->state == UNUSED) {
       goto found;
+    }
+  }
 
   release(&ptable.lock);
-  return 0;
+  return 0; // No UNUSED slot found, return 0
 
 found:
+  // We have found an UNUSED slot, so initialize the process structure fields
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->nice = 3;  // Initialize nice value for the new process with default priority
 
   release(&ptable.lock);
 
-  // Allocate kernel stack.
+  // Allocate kernel stack
   if((p->kstack = kalloc()) == 0){
+    acquire(&ptable.lock);
     p->state = UNUSED;
+    release(&ptable.lock);
     return 0;
   }
+  
   sp = p->kstack + KSTACKSIZE;
 
-  // Leave room for trap frame.
+  // Leave room for trap frame
   sp -= sizeof *p->tf;
   p->tf = (struct trapframe*)sp;
 
-  // Set up new context to start executing at forkret,
-  // which returns to trapret.
+  // Set up new context to start executing at forkret, which returns to trapret
   sp -= 4;
   *(uint*)sp = (uint)trapret;
 
@@ -114,6 +121,7 @@ found:
 
   return p;
 }
+
 
 //PAGEBREAK: 32
 // Set up first user process.
@@ -322,37 +330,48 @@ wait(void)
 void
 scheduler(void)
 {
-  struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
-  
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
+    struct proc *p;
+    struct cpu *c = mycpu();   // Get the current CPU
+    c->proc = 0;
 
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+    for(;;) {
+        // Enable interrupts on this processor.
+        sti();
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+        struct proc *selected_proc = 0;  // Variable to store the process with highest priority
+        int min_nice = MAX_NICE + 1;     // Initialize min_nice to higher than MAX_NICE
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+        acquire(&ptable.lock);   // Acquire the process table lock
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+        // Loop over the process table to find the highest-priority runnable process.
+        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+            if(p->state == RUNNABLE) {   // Check if the process is runnable
+                // Select the runnable process with the lowest nice value (highest priority).
+                if(p->nice < min_nice) {
+                    min_nice = p->nice;      // Update min_nice to the lowest found nice value
+                    selected_proc = p;       // Store this process as the selected one
+                }
+            }
+        }
+
+        // If a runnable process is found, execute it.
+        if(selected_proc) {
+            p = selected_proc;
+            c->proc = p;           // Set this process as the current process on the CPU
+            switchuvm(p);          // Switch to the process's address space
+            p->state = RUNNING;     // Mark the process as running
+
+            // Context switch to the chosen process.
+            swtch(&(c->scheduler), p->context);
+            switchkvm();            // Switch back to the kernel page table
+
+            // Process is done running for now.
+            // It should have changed its p->state before coming back.
+            c->proc = 0;            // Clear the current process from the CPU
+        }
+
+        release(&ptable.lock);  // Release the process table lock
     }
-    release(&ptable.lock);
-
-  }
 }
 
 // Enter scheduler.  Must hold only ptable.lock
