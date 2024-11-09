@@ -6,6 +6,8 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#define PRIORITY_SCHEDULER 1
+
 
 
 
@@ -327,52 +329,119 @@ wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
-void
-scheduler(void)
-{
+// void
+// scheduler(void)
+// {
+//     struct proc *p;
+//     struct cpu *c = mycpu();   // Get the current CPU
+//     c->proc = 0;
+
+//     for(;;) {
+//         // Enable interrupts on this processor.
+//         sti();
+
+//         struct proc *selected_proc = 0;  // Variable to store the process with highest priority
+//         int min_nice = MAX_NICE + 1;     // Initialize min_nice to higher than MAX_NICE
+
+//         acquire(&ptable.lock);   // Acquire the process table lock
+
+//         // Loop over the process table to find the highest-priority runnable process.
+//         for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+//             if(p->state == RUNNABLE) {   // Check if the process is runnable
+//                 // Select the runnable process with the lowest nice value (highest priority).
+//                 if(p->nice < min_nice) {
+//                     min_nice = p->nice;      // Update min_nice to the lowest found nice value
+//                     selected_proc = p;       // Store this process as the selected one
+//                 }
+//             }
+//         }
+
+//         // If a runnable process is found, execute it.
+//         if(selected_proc) {
+//             p = selected_proc;
+//             c->proc = p;           // Set this process as the current process on the CPU
+//             switchuvm(p);          // Switch to the process's address space
+//             p->state = RUNNING;     // Mark the process as running
+
+//             // Context switch to the chosen process.
+//             swtch(&(c->scheduler), p->context);
+//             switchkvm();            // Switch back to the kernel page table
+
+//             // Process is done running for now.
+//             // It should have changed its p->state before coming back.
+//             c->proc = 0;            // Clear the current process from the CPU
+//         }
+
+//         release(&ptable.lock);  // Release the process table lock
+//     }
+// }
+
+void scheduler(void) {
     struct proc *p;
-    struct cpu *c = mycpu();   // Get the current CPU
+    struct cpu *c = mycpu();
     c->proc = 0;
 
     for(;;) {
         // Enable interrupts on this processor.
         sti();
 
-        struct proc *selected_proc = 0;  // Variable to store the process with highest priority
-        int min_nice = MAX_NICE + 1;     // Initialize min_nice to higher than MAX_NICE
+        #if PRIORITY_SCHEDULER
+            struct proc *selected_proc = 0;
+            int min_nice = MAX_NICE + 1;
 
-        acquire(&ptable.lock);   // Acquire the process table lock
+            acquire(&ptable.lock);
 
-        // Loop over the process table to find the highest-priority runnable process.
-        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-            if(p->state == RUNNABLE) {   // Check if the process is runnable
-                // Select the runnable process with the lowest nice value (highest priority).
-                if(p->nice < min_nice) {
-                    min_nice = p->nice;      // Update min_nice to the lowest found nice value
-                    selected_proc = p;       // Store this process as the selected one
+            // Priority-based scheduler logic
+            for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+                if (p->state == RUNNABLE && p->nice < min_nice) {
+                    min_nice = p->nice;
                 }
             }
-        }
 
-        // If a runnable process is found, execute it.
-        if(selected_proc) {
-            p = selected_proc;
-            c->proc = p;           // Set this process as the current process on the CPU
-            switchuvm(p);          // Switch to the process's address space
-            p->state = RUNNING;     // Mark the process as running
+            for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+                if (p->state == RUNNABLE && p->nice == min_nice) {
+                    selected_proc = p;
+                    break;
+                }
+            }
 
-            // Context switch to the chosen process.
-            swtch(&(c->scheduler), p->context);
-            switchkvm();            // Switch back to the kernel page table
+            if (selected_proc) {
+                p = selected_proc;
+                c->proc = p;
+                switchuvm(p);
+                p->state = RUNNING;
 
-            // Process is done running for now.
-            // It should have changed its p->state before coming back.
-            c->proc = 0;            // Clear the current process from the CPU
-        }
+                swtch(&(c->scheduler), p->context);
+                switchkvm();
 
-        release(&ptable.lock);  // Release the process table lock
+                c->proc = 0;
+            }
+
+            release(&ptable.lock);
+
+        #else
+            acquire(&ptable.lock);
+
+            // Original round-robin scheduler logic
+            for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+                if(p->state != RUNNABLE)
+                    continue;
+
+                c->proc = p;
+                switchuvm(p);
+                p->state = RUNNING;
+
+                swtch(&(c->scheduler), p->context);
+                switchkvm();
+
+                c->proc = 0;
+            }
+
+            release(&ptable.lock);
+        #endif
     }
 }
+
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores

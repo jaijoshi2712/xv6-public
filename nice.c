@@ -12,9 +12,9 @@ int main(int argc, char *argv[]) {
         // If only value is provided, assume it’s for the current process
         pid = getpid();
         value = atoi(argv[1]);
-        printf(1, "Current PID: %d\n", pid);  // Debug: Print the current process PID
+       
     } else {
-        printf(2, "Usage: nice <pid> <value> or nice <value>\n");
+       
         exit();
     }
 
@@ -22,9 +22,9 @@ int main(int argc, char *argv[]) {
     old_value = nice(pid, value);
 
     if(old_value < 0) {
-        printf(2, "Error: Invalid PID or nice value\n");
+        
     } else {
-        printf(1, "%d %d\n", pid, old_value);  // Print PID and old nice value only
+       
     }
 
     exit();

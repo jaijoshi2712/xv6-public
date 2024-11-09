@@ -31,7 +31,7 @@ sys_nice(void)
         if(p->pid == pid) {       // Check if this is the target process
             old_nice = p->nice;   // Store old nice value before updating
             p->nice = value;      // Update to new nice value
-            cprintf("Changing PID %d nice from %d to %d\n", pid, old_nice, value); // Debug
+           
             release(&ptable.lock);
 
             return old_nice;  // Return only the old nice value
