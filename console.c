@@ -15,6 +15,10 @@
 #include "proc.h"
 #include "x86.h"
 
+
+
+
+
 static void consputc(int);
 
 static int panicked = 0;
@@ -289,6 +293,7 @@ void
 consoleinit(void)
 {
   initlock(&cons.lock, "console");
+
 
   devsw[CONSOLE].write = consolewrite;
   devsw[CONSOLE].read = consoleread;
